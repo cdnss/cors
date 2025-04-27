@@ -3,7 +3,7 @@
  * Copyright 2024 Google Inc.
  * SPDX-License-Identifier: Apache-2.0
  */
-const puppeteer = require('puppeteer');
+import puppeteer from 'puppeteer';
 
 /**
  * To have Puppeteer fetch a Firefox binary for you, first run:
