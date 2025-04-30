@@ -23,9 +23,11 @@ const HEADERS_DENY_LIST = [
     // Tambahkan header lain di sini jika perlu
 ];
 
-// Fungsi bantu untuk menyalin header, mengecualikan yang ada di denylist
-function copyFilteredHeaders(originalHeaders: Headers): Record<string, string> {
+// Fungsi bantu untuk menyalin header.
+// Asumsi: Menerima objek yang bisa di-iterate (akan divalidasi sebelum dipanggil).
+function copyFilteredHeaders(originalHeaders: Headers | Map<string, string>): Record<string, string> {
     const copied: Record<string, string> = {};
+    // Loop melalui header (diasumsikan sudah iterable karena validasi sebelumnya)
     for (const [name, value] of originalHeaders) {
         const lowerName = name.toLowerCase();
         // Salin jika tidak ada di denylist dan bukan header Cloudflare spesifik
@@ -52,7 +54,7 @@ export default {
     const initialResponse = await fetch(url);
     const contentType = initialResponse.headers.get('content-type') || '';
 
-    // Cek jika kontennya adalah HTML (dan kita asumsikan perlu Puppeteer untuk memprosesnya)
+    // Cek jika kontennya adalah HTML dan perlu Puppeteer
     if (contentType.includes('text/html')) {
          console.log(`Content-Type adalah HTML (${contentType}), memproses dengan Puppeteer...`);
 
@@ -77,30 +79,37 @@ export default {
              const page = await browser.newPage();
 
              try {
-                 // Buka URL dengan Puppeteer dan tunggu hingga 'networkidle0'
                  console.log(`Membuka URL ${url} dengan Puppeteer, menunggu 'networkidle0'...`);
-                 const puppeteerResponse = await page.goto(url, { waitUntil: 'networkidle0' }); // <--- Perubahan di sini
+                 const puppeteerResponse = await page.goto(url, { waitUntil: 'networkidle0' }); // Tetap menunggu networkidle0
 
                  if (!puppeteerResponse) {
-                      // Ini bisa terjadi pada redirect atau navigasi yang tidak menghasilkan respons utama
                       throw new Error("Navigasi Puppeteer gagal atau tidak mengembalikan respons utama.");
                  }
 
                  console.log(`Navigasi Puppeteer selesai. Status: ${puppeteerResponse.status()}`);
 
-                 // Tunggu hingga elemen iframe pertama terlihat
-                 console.log('Menunggu iframe pertama terlihat...');
-                 // Puppeteer default timeout untuk waitForSelector adalah 30 detik
-                 // await page.waitForSelector('iframe', { visible: true });
-                 console.log('iframe terlihat.');
+                 const targetHeadersResult = puppeteerResponse.headers(); // Ambil hasil dari headers()
+                 let copiedHeaders: Record<string, string> = {}; // Siapkan objek untuk header yang akan disalin
 
-                 // Ambil seluruh konten HTML halaman setelah menunggu
+                 // Cek apakah hasil dari headers() valid dan bisa di-iterate
+                 if (targetHeadersResult && typeof targetHeadersResult[Symbol.iterator] === 'function') {
+                      copiedHeaders = copyFilteredHeaders(targetHeadersResult); // Panggil fungsi copy jika valid
+                      console.log('Headers dari respons Puppeteer berhasil disalin.');
+                 } else {
+                      // Jika tidak valid, cetak peringatan dan gunakan objek header kosong
+                      console.warn("Peringatan: Hasil dari puppeteerResponse.headers() tidak iterable atau null.", targetHeadersResult);
+                      console.log('Menggunakan header kosong untuk respons Puppeteer.');
+                 }
+
+                 // *** BARIS UNTUK MENUNGGU IFRAME TELAH DIHAPUS DI SINI ***
+                 // console.log('Menunggu iframe pertama terlihat...');
+                 // await page.waitForSelector('iframe', { visible: true });
+                 // console.log('iframe terlihat.');
+
+
+                 // Ambil seluruh konten HTML halaman setelah menunggu networkidle0 (tanpa menunggu iframe)
                  htmlContent = await page.content();
                  console.log('Konten HTML diambil.');
-
-                 // Ambil header dari respons Puppeteer dan saring
-                 const targetHeaders = puppeteerResponse.headers();
-                 const copiedHeaders = copyFilteredHeaders(targetHeaders);
 
                  // Simpan konten HTML dan header yang disaring ke KV
                  await env.BROWSER_KV_DEMO.put(url, JSON.stringify({ html: htmlContent, headers: copiedHeaders }), {
@@ -109,7 +118,7 @@ export default {
                  });
                  console.log('Konten HTML dan header baru di-cache.');
 
-                 headersToReturn = new Headers(copiedHeaders); // Gunakan header yang baru disalin
+                 headersToReturn = new Headers(copiedHeaders); // Gunakan header yang disalin (bisa kosong)
 
              } catch (error: any) {
                  console.error(`Error saat memproses URL ${url} dengan Puppeteer:`, error);
@@ -126,8 +135,8 @@ export default {
          // Kembalikan konten HTML yang dirender dengan header yang disalin/dari cache
          if (htmlContent !== null) {
               const finalResponse = new Response(htmlContent, {
-                  headers: headersToReturn,
-                  status: cachedData ? 200 : initialResponse.status, // Gunakan status asli kecuali dari cache (OK)
+                  headers: headersToReturn, // Gunakan header yang disalin/dari cache (termasuk Content-Type asli)
+                  status: cachedData ? 200 : initialResponse.status, // Gunakan status asli kecuali dari cache (200 OK)
                   statusText: cachedData ? 'OK' : initialResponse.statusText, // Gunakan status text asli
               });
               return finalResponse;
@@ -140,7 +149,6 @@ export default {
     } else {
         // Jika kontennya BUKAN HTML, langsung kembalikan respons dari fetch awal
         console.log(`Content-Type bukan HTML (${contentType}), mengembalikan respons asli...`);
-        // Mengembalikan objek Response dari fetch() secara langsung akan menyertakan body dan header asli.
         return initialResponse;
     }
   },
