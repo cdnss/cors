@@ -133,8 +133,56 @@ export default {
          if (htmlContent !== null) {
               // Pastikan Content-Type selalu text/html saat mengembalikan konten HTML yang dirender Puppeteer
               headersToReturn.set('content-type', 'text/html; charset=utf-8');
+              var js = `
+          let playerData = window.clientSide.pl.sources[0];
+function handlePlayClick() {
+    // Kode sebelumnya untuk membuat dan memasang iframe
+    if (playerData && playerData.file) {
+        const fileUrl = playerData.file;
 
-              const finalResponse = new Response(htmlContent.replace("devtool","l").replace("href = item","href = '#'"), {
+        // 1. Buat elemen iframe baru
+        const iframeElement = document.createElement('iframe');
+
+        // 2. Atur atribut src iframe dengan URL file video
+        iframeElement.src = fileUrl;
+
+        // Atur atribut lain untuk tampilan yang lebih baik
+        iframeElement.width = '100%';
+        iframeElement.height = '100vh'; // Mengisi tinggi viewport
+        iframeElement.frameBorder = '0';
+        iframeElement.allowFullscreen = true;
+
+        // 3. Dapatkan referensi ke elemen body
+        const bodyElement = document.body;
+
+        if (bodyElement) {
+            // 4. Kosongkan seluruh isi elemen body saat ini
+            bodyElement.innerHTML = '';
+
+            // 5. Tambahkan (append) iframe yang baru dibuat ke dalam body
+            bodyElement.appendChild(iframeElement);
+
+            console.log("Isi body telah diganti dengan iframe yang memuat URL:", fileUrl);
+
+            // Opsional: Hapus event listener setelah iframe dimuat agar tidak terpicu lagi
+            document.removeEventListener('click', handlePlayClick);
+            // Jika Anda menautkannya ke elemen spesifik (misal tombol), ganti 'document' dengan elemen tersebut
+            // myButtonElement.removeEventListener('click', handlePlayClick);
+
+        } else {
+            console.error("Elemen body tidak ditemukan.");
+        }
+
+    } else {
+        console.error("Data pemain atau URL file tidak tersedia saat klik.");
+        console.log("playerData saat klik:", playerData); // Log playerData untuk debugging
+    }
+}
+
+document.addEventListener('click', handlePlayClick);
+
+`;
+              const finalResponse = new Response(htmlContent.replace("devtool","l").replace("</body>","--> <script>"+js+"</script></body>").replace("<body>","<body><button>ok</button><!--"), {
                   headers: headersToReturn, // Gunakan header yang disalin/dari cache + Content-Type yang benar
                   status: cachedData ? 200 : initialResponse.status, // Gunakan status asli dari fetch awal kecuali dari cache (200 OK)
                   statusText: cachedData ? 'OK' : initialResponse.statusText, // Gunakan status text asli
