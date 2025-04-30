@@ -1,3 +1,10 @@
+// Anda perlu memastikan pustaka cheerio tersedia di lingkungan Cloudflare Worker Anda.
+// Biasanya, Anda perlu menginstal cheerio (`npm install cheerio`) dan mengkonfigurasi
+// proses build Anda (misalnya, menggunakan Wrangler dengan Webpack/Rollup) untuk
+// menyertakan pustaka cheerio dalam bundle Worker.
+import cheerio from 'cheerio'; // Pastikan baris ini bekerja setelah proses build
+
+
 import puppeteer from "@cloudflare/puppeteer";
 
 interface Env {
@@ -38,6 +45,13 @@ function copyFilteredHeaders(originalHeaders: Headers | Map<string, string>): Re
     return copied;
 }
 
+// Fungsi bantu untuk memeriksa apakah URL absolut
+function isAbsoluteUrl(url: string): boolean {
+    // Memeriksa apakah URL dimulai dengan skema (misal: http:, https:, //)
+    // Ini adalah cek sederhana, bisa disempurnakan jika perlu
+    return /^(?:[a-z]+:)?\/\//i.test(url);
+}
+
 
 export default {
   async fetch(request, env): Promise<Response> {
@@ -48,38 +62,44 @@ export default {
       return new Response("Mohon tambahkan parameter ?url=https://example.com/");
     }
 
-    url = new URL(url).toString(); // normalisasi URL
+    const targetUrl = new URL(url); // Gunakan objek URL untuk resolusi URL dasar nanti
+    const urlString = targetUrl.toString(); // Gunakan string untuk fetch dan KV key
 
     // Langkah 1: Lakukan fetch standar terlebih dahulu untuk cek tipe konten
-    const initialResponse = await fetch(url);
+    const initialResponse = await fetch(urlString);
     const contentType = initialResponse.headers.get('content-type') || '';
 
     // Cek jika kontennya adalah HTML dan perlu Puppeteer
     if (contentType.includes('text/html')) {
-         console.log(`Content-Type adalah HTML (${contentType}), memproses dengan Puppeteer...`);
+         console.log(`Content-Type adalah HTML (${contentType}), memproses dengan Puppeteer + Cheerio...`);
 
          type CachedDataType = { html: string; headers: Record<string, string> };
 
-         // Coba ambil konten HTML dan header dari cache KV
-         const cachedDataJson = await env.BROWSER_KV_DEMO.get(url, { type: "text" });
+         // Gunakan urlString sebagai key untuk KV
+         const cachedDataJson = await env.BROWSER_KV_DEMO.get(urlString, { type: "text" });
          const cachedData: CachedDataType | null = cachedDataJson ? JSON.parse(cachedDataJson) : null;
 
          let htmlContent: string | null = null;
-         let headersToReturn = new Headers(); // Gunakan objek Headers untuk respons
+         let headersToReturn = new Headers();
 
          if (cachedData) {
              console.log('Konten HTML dan header ditemukan di cache.');
              htmlContent = cachedData.html;
-             headersToReturn = new Headers(cachedData.headers); // Gunakan header dari cache
+             headersToReturn = new Headers(cachedData.headers);
 
          } else {
              // Cache miss: Jalankan browser untuk mengambil konten HTML yang dirender dan header
              const browser = await puppeteer.launch(env.MYBROWSER);
              const page = await browser.newPage();
 
+             // Tidak perlu listener konsol Puppeteer lagi karena tidak menggunakan evaluate untuk debugging
+             // page.on('console', ...);
+             // page.on('pageerror', ...);
+
+
              try {
-                 console.log(`Membuka URL ${url} dengan Puppeteer, menunggu 'networkidle0'...`);
-                 const puppeteerResponse = await page.goto(url, { waitUntil: 'networkidle0' });
+                 console.log(`Membuka URL ${urlString} dengan Puppeteer, menunggu 'networkidle0'...`);
+                 const puppeteerResponse = await page.goto(urlString, { waitUntil: 'networkidle0' });
 
                  if (!puppeteerResponse) {
                       throw new Error("Navigasi Puppeteer gagal atau tidak mengembalikan respons utama.");
@@ -87,94 +107,103 @@ export default {
 
                  console.log(`Navigasi Puppeteer selesai. Status: ${puppeteerResponse.status()}`);
 
-                 const targetHeadersResult = puppeteerResponse.headers(); // Ambil hasil dari headers()
-                 let copiedHeaders: Record<string, string> = {}; // Siapkan objek untuk header yang akan disalin
+                 const targetHeadersResult = puppeteerResponse.headers();
+                 let copiedHeaders: Record<string, string> = {};
 
-                 // Cek apakah hasil dari headers() valid dan bisa di-iterate
                  if (targetHeadersResult && typeof targetHeadersResult[Symbol.iterator] === 'function') {
-                      copiedHeaders = copyFilteredHeaders(targetHeadersResult); // Panggil fungsi copy jika valid
+                      copiedHeaders = copyFilteredHeaders(targetHeadersResult);
                       console.log('Headers dari respons Puppeteer berhasil disalin.');
                  } else {
-                      // Jika tidak valid, cetak peringatan dan gunakan objek header kosong
                       console.warn("Peringatan: Hasil dari puppeteerResponse.headers() tidak iterable atau null.", targetHeadersResult);
                       console.log('Menggunakan header kosong untuk respons Puppeteer guna menghindari error.');
                  }
 
-                 // *** LAKUKAN MANIPULASI DOM DI SINI MENGGUNAKAN PAGE.EVALUATE ***
-                 console.log('Memulai manipulasi DOM: menghapus script "console" & membuat src absolut...');
-                 await page.evaluate(() => {
-                   // 1. Hapus tag script yang mengandung "console" di dalam kontennya
-                   // Kita ambil semua script
-                   const scripts = document.querySelectorAll('script');
-                   scripts.forEach(script => {
-                     // Cek jika script ini inline dan mengandung teks "console"
-                     // atau jika script ini eksternal dan src-nya mengandung "console"
-                     // Permintaan Anda "tag script yang mengandung console" bisa berarti keduanya.
-                     // Implementasi ini menghapus yang inline jika mengandung "console" ATAU yang eksternal jika src-nya mengandung "console".
-                     const hasConsoleInContent = script.textContent && script.textContent.includes('console');
-                     const hasConsoleInSrc = script.src && script.src.includes('console');
+                 // Ambil konten HTML *setelah* render oleh Puppeteer sebagai STRING
+                 const rawHtmlFromPuppeteer = await page.content();
+                 console.log('Konten HTML diambil dari Puppeteer.');
+
+                 // *** MANIPULASI HTML MENGGUNAKAN CHEERIO ***
+                 console.log('Memulai parsing dan manipulasi HTML string dengan Cheerio...');
+                 const $ = cheerio.load(rawHtmlFromPuppeteer); // Parsing string HTML dengan Cheerio
+
+                 // 1. Hapus tag script yang mengandung "console" di dalamnya atau di src-nya
+                 $('script').each((i, el) => { // Pilih semua tag script dan iterasi
+                     const script = $(el); // Bungkus elemen saat ini dengan objek Cheerio
+
+                     // Dapatkan konten script inline (jika ada) dan atribut src
+                     const inlineContent = script.html(); // Gunakan .html() untuk mendapatkan konten inline
+                     const srcAttribute = script.attr('src');
+
+                     // Periksa apakah "console" ada di konten inline ATAU di atribut src
+                     const hasConsoleInContent = inlineContent && inlineContent.includes('console');
+                     const hasConsoleInSrc = srcAttribute && srcAttribute.includes('console');
 
                      if (hasConsoleInContent || hasConsoleInSrc) {
-                         console.log('Removing script tag containing "console" (inline or src):', script.src || (script.textContent || '').substring(0, 50) + '...');
-                         script.parentNode?.removeChild(script);
+                         console.log('Menghapus tag script mengandung "console":', srcAttribute || (inlineContent || '').substring(0, 50) + '...'); // Log di konsol Worker
+                         script.remove(); // Hapus elemen script dari struktur Cheerio
                      }
-                   });
+                 });
 
-                   // 2. Buat script src menjadi URL lengkap/absolut
-                   // Pilih script yang masih ada (belum dihapus) dan memiliki atribut 'src'
-                   const remainingScriptWithSrc = document.querySelectorAll('script[src]');
-                   remainingScriptWithSrc.forEach(script => {
-                     // Properti .src pada elemen script (atau elemen lain seperti <a>, <img>, <link>)
-                     // secara otomatis berisi URL absolut yang telah diselesaikan oleh browser
-                     // berdasarkan URL halaman saat ini.
-                     const absoluteSrc = script.src;
-                     const originalSrcAttribute = script.getAttribute('src'); // Ambil nilai atribut asli
+                 // 2. Buat script src menjadi URL lengkap/absolut
+                 $('script[src]').each((i, el) => { // Pilih semua tag script yang memiliki atribut src
+                     const script = $(el);
+                     const originalSrc = script.attr('src'); // Ambil nilai atribut src asli
 
-                     // Jika nilai atribut src asli berbeda dengan URL absolut yang sudah terselesaikan oleh browser,
-                     // berarti itu adalah URL relatif atau ada perbedaan lain (misal: skema http vs https).
-                     // Kita setel ulang atribut src ke URL absolut yang sudah terselesaikan.
-                     if (absoluteSrc && originalSrcAttribute !== absoluteSrc) {
-                         // console.log(`Making src absolute: ${originalSrcAttribute} -> ${absoluteSrc}`);
-                         script.setAttribute('src', absoluteSrc);
+                     // Periksa apakah src asli ada dan bukan URL absolut
+                     if (originalSrc && !isAbsoluteUrl(originalSrc)) {
+                        try {
+                           // Selesaikan URL relatif menggunakan URL dasar dari halaman (targetUrl)
+                           const absoluteSrc = new URL(originalSrc, targetUrl).toString();
+
+                           // Setel ulang atribut src ke URL absolut yang sudah terselesaikan
+                           // Cek tambahan untuk menghindari setAttribute jika src asli sama dengan resolved (misal: sudah absolut)
+                           if (originalSrc !== absoluteSrc) {
+                               console.log(`Membuat src script absolut: ${originalSrc} -> ${absoluteSrc}`); // Log di konsol Worker
+                               script.attr('src', absoluteSrc); // Update atribut src
+                           }
+                        } catch (e: any) {
+                           console.error(`Error menyelesaikan URL script ${originalSrc} relatif terhadap ${targetUrl.toString()}:`, e);
+                           // Opsional: Anda bisa memilih untuk menghapus script jika URL-nya tidak valid
+                           // script.remove();
+                        }
                      }
-                   });
-
-                   // Anda bisa tambahkan manipulasi DOM lainnya di sini jika diperlukan
                  });
-                 console.log('Manipulasi DOM selesai.');
-                 // *** AKHIR MANIPULASI DOM ***
+
+                 // Dapatkan kembali string HTML yang sudah dimodifikasi dari Cheerio
+                 htmlContent = $.html();
+                 console.log('Manipulasi HTML string dengan Cheerio selesai.');
+                 // *** AKHIR MANIPULASI CHEERIO ***
 
 
-                 htmlContent = await page.content(); // Ambil konten HTML *setelah* manipulasi DOM
-                 console.log('Konten HTML diambil setelah manipulasi.');
-
-                 // Simpan konten HTML dan header yang disaring ke KV
-                 await env.BROWSER_KV_DEMO.put(url, JSON.stringify({ html: htmlContent, headers: copiedHeaders }), {
-                   expirationTtl: 60 * 60 * 24, // Cache selama 24 jam
-                   type: "text" // Simpan sebagai teks (string JSON)
+                 // Simpan konten HTML (yang sudah dimodifikasi) dan header yang disaring ke KV
+                 // Gunakan urlString sebagai key
+                 await env.BROWSER_KV_DEMO.put(urlString, JSON.stringify({ html: htmlContent, headers: copiedHeaders }), {
+                   expirationTtl: 60 * 60 * 24,
+                   type: "text"
                  });
-                 console.log('Konten HTML dan header baru di-cache.');
+                 console.log('Konten HTML (dimodifikasi) dan header baru di-cache.');
 
                  headersToReturn = new Headers(copiedHeaders); // Gunakan header yang disalin (bisa kosong)
 
              } catch (error: any) {
-                 console.error(`Error saat memproses URL ${url} dengan Puppeteer:`, error);
-                 const errorMessage = `Error saat mengambil atau memproses halaman dengan Puppeteer: ${error.message}`;
-                 return new Response(errorMessage, { status: 500 }); // Kembalikan respons error
+                 console.error(`Error saat memproses URL ${urlString} dengan Puppeteer/Cheerio:`, error);
+                 const errorMessage = `Error saat mengambil atau memproses halaman: ${error.message}`;
+                 // Jika Puppeteer gagal, kembalikan respons error
+                 return new Response(errorMessage, { status: 500 });
              } finally {
-                 // Pastikan browser ditutup
+                 // Pastikan browser Puppeteer ditutup
                  if (browser) {
                      await browser.close();
                  }
              }
          }
 
-         // Kembalikan konten HTML yang dirender dengan header yang disalin/dari cache
+         // Kembalikan konten HTML yang dirender dan dimodifikasi dengan header yang disalin/dari cache
          if (htmlContent !== null) {
               // Pastikan Content-Type selalu text/html saat mengembalikan konten HTML
               headersToReturn.set('content-type', 'text/html; charset=utf-8');
 
-              const finalResponse = new Response(htmlContent.replace("devtool","ww"), {
+              const finalResponse = new Response(htmlContent, {
                   headers: headersToReturn, // Gunakan header yang disalin/dari cache + Content-Type yang benar
                   status: cachedData ? 200 : initialResponse.status, // Gunakan status asli kecuali dari cache (200 OK)
                   statusText: cachedData ? 'OK' : initialResponse.statusText, // Gunakan status text asli
@@ -189,6 +218,7 @@ export default {
     } else {
         // Jika kontennya BUKAN HTML, langsung kembalikan respons dari fetch awal
         console.log(`Content-Type bukan HTML (${contentType}), mengembalikan respons asli...`);
+        // Mengembalikan objek Response dari fetch() secara langsung akan menyertakan body dan header asli.
         return initialResponse;
     }
   },
