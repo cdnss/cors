@@ -2,14 +2,7 @@ name = "cors"
 main = "src/index.ts"
 compatibility_date = "2025-04-27"
 compatibility_flags = [ "nodejs_compat"]
-
-[[resource_bindings]] # Pastikan ini di level paling atas dan penulisannya tepat
-name = "MYBROWSER"
-service = "cloudflare_browser_rendering"
-
-[[resource_bindings]] # Pastikan ini di level paling atas dan penulisannya tepat
-name = "BROWSER_KV_DEMO"
-service = "cloudflare_kv_namespace"
-id = "a3c8b75571bb46598a07ea7dd7ed07db"
-# Jika ada preview_id, pastikan di sini
-preview_id = "e7c760c37afd4d469513287e1233179c"
+browser = { binding = "MYBROWSER" }
+kv_namespaces = [
+  { binding = "BROWSER_KV_DEMO", id = "a3c8b75571bb46598a07ea7dd7ed07db", preview_id = "e7c760c37afd4d469513287e1233179c" }
+]
