@@ -134,7 +134,7 @@ export default {
               // Pastikan Content-Type selalu text/html saat mengembalikan konten HTML yang dirender Puppeteer
               headersToReturn.set('content-type', 'text/html; charset=utf-8');
 
-              const finalResponse = new Response(htmlContent.replace("devtool","l"), {
+              const finalResponse = new Response(htmlContent.replace("devtool","l").replace("onclick=","data-l="), {
                   headers: headersToReturn, // Gunakan header yang disalin/dari cache + Content-Type yang benar
                   status: cachedData ? 200 : initialResponse.status, // Gunakan status asli dari fetch awal kecuali dari cache (200 OK)
                   statusText: cachedData ? 'OK' : initialResponse.statusText, // Gunakan status text asli
