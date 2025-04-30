@@ -1,9 +1,4 @@
-// Anda perlu memastikan pustaka cheerio tersedia di lingkungan Cloudflare Worker Anda.
-// Biasanya, Anda perlu menginstal cheerio (`npm install cheerio`) dan mengkonfigurasi
-// proses build Anda (misalnya, menggunakan Wrangler dengan Webpack/Rollup) untuk
-// menyertakan pustaka cheerio dalam bundle Worker.
-import cheerio from 'cheerio'; // Pastikan baris ini bekerja setelah proses build
-
+import * as cheerio from 'cheerio'; // Menggunakan namespace import
 
 import puppeteer from "@cloudflare/puppeteer";
 
