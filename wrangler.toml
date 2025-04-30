@@ -3,15 +3,13 @@ main = "src/index.ts"
 compatibility_date = "2025-04-27"
 compatibility_flags = [ "nodejs_compat"]
 
-# Binding untuk Browser
-[[resource_bindings]]
-name = "MYBROWSER" # Nama binding di Worker (env.MYBROWSER)
-service = "cloudflare_browser_rendering" # Jenis resource
+[[resource_bindings]] # Pastikan ini di level paling atas dan penulisannya tepat
+name = "MYBROWSER"
+service = "cloudflare_browser_rendering"
 
-# Binding untuk KV Namespace
-[[resource_bindings]]
-name = "BROWSER_KV_DEMO" # Nama binding di Worker (env.BROWSER_KV_DEMO)
-service = "cloudflare_kv_namespace" # Jenis resource
-id = "a3c8b75571bb46598a07ea7dd7ed07db" # ID KV Namespace Anda
-# Jika ada preview_id yang berbeda, tambahkan baris ini:
+[[resource_bindings]] # Pastikan ini di level paling atas dan penulisannya tepat
+name = "BROWSER_KV_DEMO"
+service = "cloudflare_kv_namespace"
+id = "a3c8b75571bb46598a07ea7dd7ed07db"
+# Jika ada preview_id, pastikan di sini
 preview_id = "e7c760c37afd4d469513287e1233179c"
