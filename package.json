@@ -12,5 +12,8 @@
     "@cloudflare/workers-types": "^4.20221111.1",
     "typescript": "^4.9.3",
     "wrangler": "^4.14.0"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.12" // Tambahkan baris ini di sini
   }
 }
