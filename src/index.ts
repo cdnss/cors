@@ -153,7 +153,7 @@ export default {
          if (htmlContent !== null) {
               // Pastikan Content-Type selalu text/html saat mengembalikan konten HTML
               headersToReturn.set('content-type', 'text/html; charset=utf-8');
-const $ = cheerio.load(rawHtmlFromPuppeteer); // Parsing string HTML dengan Cheerio
+const $ = cheerio.load(htmlContent); // Parsing string HTML dengan Cheerio
 
                  // 1. Hapus tag script yang mengandung "console" di dalamnya atau di src-nya
                  $('script').each((i, el) => { // Pilih semua tag script dan iterasi
