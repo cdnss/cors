@@ -32,4 +32,4 @@ export default {
       return new Response("Please add an ?url=https://example.com/ parameter");
     }
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Env>
