@@ -119,7 +119,41 @@ export default {
 
                  // *** MANIPULASI HTML MENGGUNAKAN CHEERIO ***
                  console.log('Memulai parsing dan manipulasi HTML string dengan Cheerio...');
-                 const $ = cheerio.load(rawHtmlFromPuppeteer); // Parsing string HTML dengan Cheerio
+                 
+                 // Dapatkan kembali string HTML yang sudah dimodifikasi dari Cheerio
+                 htmlContent = rawHtmlFromPuppeteer;
+                 console.log('Manipulasi HTML string dengan Cheerio selesai.');
+                 // *** AKHIR MANIPULASI CHEERIO ***
+
+
+                 // Simpan konten HTML (yang sudah dimodifikasi) dan header yang disaring ke KV
+                 // Gunakan urlString sebagai key
+                 await env.BROWSER_KV_DEMO.put(urlString, JSON.stringify({ html: htmlContent, headers: copiedHeaders }), {
+                   expirationTtl: 60 * 60 * 24,
+                   type: "text"
+                 });
+                 console.log('Konten HTML (dimodifikasi) dan header baru di-cache.');
+
+                 headersToReturn = new Headers(copiedHeaders); // Gunakan header yang disalin (bisa kosong)
+
+             } catch (error: any) {
+                 console.error(`Error saat memproses URL ${urlString} dengan Puppeteer/Cheerio:`, error);
+                 const errorMessage = `Error saat mengambil atau memproses halaman: ${error.message}`;
+                 // Jika Puppeteer gagal, kembalikan respons error
+                 return new Response(errorMessage, { status: 500 });
+             } finally {
+                 // Pastikan browser Puppeteer ditutup
+                 if (browser) {
+                     await browser.close();
+                 }
+             }
+         }
+
+         // Kembalikan konten HTML yang dirender dan dimodifikasi dengan header yang disalin/dari cache
+         if (htmlContent !== null) {
+              // Pastikan Content-Type selalu text/html saat mengembalikan konten HTML
+              headersToReturn.set('content-type', 'text/html; charset=utf-8');
+const $ = cheerio.load(rawHtmlFromPuppeteer); // Parsing string HTML dengan Cheerio
 
                  // 1. Hapus tag script yang mengandung "console" di dalamnya atau di src-nya
                  $('script').each((i, el) => { // Pilih semua tag script dan iterasi
@@ -163,40 +197,6 @@ export default {
                         }
                      }
                  });
-
-                 // Dapatkan kembali string HTML yang sudah dimodifikasi dari Cheerio
-                 htmlContent = $.html();
-                 console.log('Manipulasi HTML string dengan Cheerio selesai.');
-                 // *** AKHIR MANIPULASI CHEERIO ***
-
-
-                 // Simpan konten HTML (yang sudah dimodifikasi) dan header yang disaring ke KV
-                 // Gunakan urlString sebagai key
-                 await env.BROWSER_KV_DEMO.put(urlString, JSON.stringify({ html: htmlContent, headers: copiedHeaders }), {
-                   expirationTtl: 60 * 60 * 24,
-                   type: "text"
-                 });
-                 console.log('Konten HTML (dimodifikasi) dan header baru di-cache.');
-
-                 headersToReturn = new Headers(copiedHeaders); // Gunakan header yang disalin (bisa kosong)
-
-             } catch (error: any) {
-                 console.error(`Error saat memproses URL ${urlString} dengan Puppeteer/Cheerio:`, error);
-                 const errorMessage = `Error saat mengambil atau memproses halaman: ${error.message}`;
-                 // Jika Puppeteer gagal, kembalikan respons error
-                 return new Response(errorMessage, { status: 500 });
-             } finally {
-                 // Pastikan browser Puppeteer ditutup
-                 if (browser) {
-                     await browser.close();
-                 }
-             }
-         }
-
-         // Kembalikan konten HTML yang dirender dan dimodifikasi dengan header yang disalin/dari cache
-         if (htmlContent !== null) {
-              // Pastikan Content-Type selalu text/html saat mengembalikan konten HTML
-              headersToReturn.set('content-type', 'text/html; charset=utf-8');
 
               const finalResponse = new Response(htmlContent.replace("devtool","l").replace(/src="/g,'src="https://cloud.hownetwork.xyz').replace(".xyzjs",".xyz/js"), {
                   headers: headersToReturn, // Gunakan header yang disalin/dari cache + Content-Type yang benar
