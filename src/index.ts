@@ -1,27 +1,35 @@
-import { chromium } from '@cloudflare/puppeteer';
+import puppeteer from "@cloudflare/puppeteer";
 
-addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request));
-});
+interface Env {
+  MYBROWSER: Fetcher;
+  BROWSER_KV_DEMO: KVNamespace;
+}
 
-async function handleRequest(request) {
-  if (request.method === 'GET') {
-    const browser = await chromium.launch();
-    try {
-      const page = await browser.newPage();
-      await page.goto('https://xtgem.com');
-      const screenshot = await page.screenshot({ encoding: 'binary' });
-      await browser.close();
-      return new Response(screenshot, {
+export default {
+  async fetch(request, env): Promise<Response> {
+    const { searchParams } = new URL(request.url);
+    let url = searchParams.get("url");
+    let img: Buffer;
+    if (url) {
+      url = new URL(url).toString(); // normalize
+      img = await env.BROWSER_KV_DEMO.get(url, { type: "arrayBuffer" });
+      if (img === null) {
+        const browser = await puppeteer.launch(env.MYBROWSER);
+        const page = await browser.newPage();
+        await page.goto(url);
+        img = (await page.screenshot()) as Buffer;
+        await env.BROWSER_KV_DEMO.put(url, img, {
+          expirationTtl: 60 * 60 * 24,
+        });
+        await browser.close();
+      }
+      return new Response(img, {
         headers: {
-          'Content-Type': 'image/png',
-          'Cache-Control': 'public, max-age=3600',
+          "content-type": "image/jpeg",
         },
       });
-    } catch (error) {
-      console.error(error);
-      return new Response('Internal Server Error', { status: 500 });
+    } else {
+      return new Response("Please add an ?url=https://example.com/ parameter");
     }
-  }
-  return new Response('Not Found', { status: 404 });
-}
+  },
+} as ExportedHandler<Env>;
