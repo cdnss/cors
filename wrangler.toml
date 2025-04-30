@@ -2,10 +2,16 @@ name = "cors"
 main = "src/index.ts"
 compatibility_date = "2025-04-27"
 compatibility_flags = [ "nodejs_compat"]
+
+# Binding untuk Browser
 [[resource_bindings]]
-name = "MYBROWSER" # Nama binding yang akan diakses di Worker (env.MYBROWSER)
+name = "MYBROWSER" # Nama binding di Worker (env.MYBROWSER)
 service = "cloudflare_browser_rendering" # Jenis resource
 
-kv_namespaces = [
-  { binding = "BROWSER_KV_DEMO", id = "a3c8b75571bb46598a07ea7dd7ed07db", preview_id = "e7c760c37afd4d469513287e1233179c" }
-]
+# Binding untuk KV Namespace
+[[resource_bindings]]
+name = "BROWSER_KV_DEMO" # Nama binding di Worker (env.BROWSER_KV_DEMO)
+service = "cloudflare_kv_namespace" # Jenis resource
+id = "a3c8b75571bb46598a07ea7dd7ed07db" # ID KV Namespace Anda
+# Jika ada preview_id yang berbeda, tambahkan baris ini:
+preview_id = "e7c760c37afd4d469513287e1233179c"
