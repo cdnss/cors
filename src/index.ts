@@ -55,6 +55,7 @@ export default {
     const contentType = initialResponse.headers.get('content-type') || '';
 
     // Cek jika kontennya adalah HTML dan perlu Puppeteer
+    // (Kita asumsikan semua konten text/html memerlukan Puppeteer berdasarkan riwayat permintaan Anda)
     if (contentType.includes('text/html')) {
          console.log(`Content-Type adalah HTML (${contentType}), memproses dengan Puppeteer...`);
 
@@ -66,7 +67,7 @@ export default {
          const cachedData: CachedDataType | null = cachedDataJson ? JSON.parse(cachedDataJson) : null;
 
          let htmlContent: string | null = null;
-         let headersToReturn = new Headers();
+         let headersToReturn = new Headers(); // Gunakan objek Headers untuk respons
 
          if (cachedData) {
              console.log('Konten HTML dan header ditemukan di cache.');
@@ -80,7 +81,7 @@ export default {
 
              try {
                  console.log(`Membuka URL ${url} dengan Puppeteer, menunggu 'networkidle0'...`);
-                 const puppeteerResponse = await page.goto(url, { waitUntil: 'networkidle0' }); // Tetap menunggu networkidle0
+                 const puppeteerResponse = await page.goto(url, { waitUntil: 'networkidle0' });
 
                  if (!puppeteerResponse) {
                       throw new Error("Navigasi Puppeteer gagal atau tidak mengembalikan respons utama.");
@@ -101,13 +102,7 @@ export default {
                       console.log('Menggunakan header kosong untuk respons Puppeteer.');
                  }
 
-                 // *** BARIS UNTUK MENUNGGU IFRAME TELAH DIHAPUS DI SINI ***
-                 // console.log('Menunggu iframe pertama terlihat...');
-                 // await page.waitForSelector('iframe', { visible: true });
-                 // console.log('iframe terlihat.');
-
-
-                 // Ambil seluruh konten HTML halaman setelah menunggu networkidle0 (tanpa menunggu iframe)
+                 // Ambil seluruh konten HTML halaman setelah menunggu networkidle0
                  htmlContent = await page.content();
                  console.log('Konten HTML diambil.');
 
@@ -134,8 +129,12 @@ export default {
 
          // Kembalikan konten HTML yang dirender dengan header yang disalin/dari cache
          if (htmlContent !== null) {
+              // *** PERBAIKAN UNTUK MASALAH HTML MENTAH ***
+              // SETEL Content-Type secara eksplisit ke text/html
+              headersToReturn.set('content-type', 'text/html; charset=utf-8');
+
               const finalResponse = new Response(htmlContent, {
-                  headers: headersToReturn, // Gunakan header yang disalin/dari cache (termasuk Content-Type asli)
+                  headers: headersToReturn, // Gunakan header yang disalin/dari cache + Content-Type yang benar
                   status: cachedData ? 200 : initialResponse.status, // Gunakan status asli kecuali dari cache (200 OK)
                   statusText: cachedData ? 'OK' : initialResponse.statusText, // Gunakan status text asli
               });
@@ -149,6 +148,7 @@ export default {
     } else {
         // Jika kontennya BUKAN HTML, langsung kembalikan respons dari fetch awal
         console.log(`Content-Type bukan HTML (${contentType}), mengembalikan respons asli...`);
+        // Mengembalikan objek Response dari fetch() secara langsung akan menyertakan body dan header asli.
         return initialResponse;
     }
   },
