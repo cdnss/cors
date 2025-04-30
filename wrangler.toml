@@ -1,3 +1,23 @@
-name = "cors"
-main = "src/index.ts"
+name = "rendering-api-demo"
+main = "src/index.js"
 compatibility_date = "2025-04-27"
+compatibility_flags = [ "nodejs_compat"]
+account_id = "e0d5018ed3ba9c871888bb16b8aab58a"
+
+
+# Browser Rendering API binding
+browser = { binding = "MYBROWSER" }
+
+# Bind an R2 Bucket
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "screenshots"
+
+# Binding to a Durable Object
+[[durable_objects.bindings]]
+name = "BROWSER"
+class_name = "Browser"
+
+[[migrations]]
+tag = "v1" # Should be unique for each entry
+new_classes = ["Browser"] # Array of new classes
