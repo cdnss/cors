@@ -5,8 +5,6 @@ interface Env {
   BROWSER_KV_DEMO: KVNamespace;
 }
 
-// Header yang biasanya tidak relevan atau dikelola oleh Cloudflare/Worker itu sendiri
-// dan sebaiknya tidak disalin dari respons target. Content-Type TIDAK ada di sini.
 const HEADERS_DENY_LIST = [
     'content-length', // Worker akan menghitung ulang
     'transfer-encoding', // Worker akan menangani
@@ -54,8 +52,7 @@ export default {
     const initialResponse = await fetch(url);
     const contentType = initialResponse.headers.get('content-type') || '';
 
-    // Cek jika kontennya adalah HTML (dan kita asumsikan perlu Puppeteer untuk memprosesnya,
-    // terutama jika ada kebutuhan menunggu elemen dinamis seperti iframe)
+    // Cek jika kontennya adalah HTML (dan kita asumsikan perlu Puppeteer untuk memprosesnya)
     if (contentType.includes('text/html')) {
          console.log(`Content-Type adalah HTML (${contentType}), memproses dengan Puppeteer...`);
 
@@ -80,17 +77,18 @@ export default {
              const page = await browser.newPage();
 
              try {
-                 // Buka URL dengan Puppeteer
-                 const puppeteerResponse = await page.goto(url, { waitUntil: 'domcontentloaded' });
+                 // Buka URL dengan Puppeteer dan tunggu hingga 'networkidle0'
+                 console.log(`Membuka URL ${url} dengan Puppeteer, menunggu 'networkidle0'...`);
+                 const puppeteerResponse = await page.goto(url, { waitUntil: 'networkidle0' }); // <--- Perubahan di sini
 
                  if (!puppeteerResponse) {
                       // Ini bisa terjadi pada redirect atau navigasi yang tidak menghasilkan respons utama
                       throw new Error("Navigasi Puppeteer gagal atau tidak mengembalikan respons utama.");
                  }
 
-                 console.log(`Navigasi Puppeteer ke ${url} selesai. Status: ${puppeteerResponse.status()}`);
+                 console.log(`Navigasi Puppeteer selesai. Status: ${puppeteerResponse.status()}`);
 
-                 // Tunggu hingga elemen iframe pertama terlihat (ini hanya relevan untuk HTML yang dinamis)
+                 // Tunggu hingga elemen iframe pertama terlihat
                  console.log('Menunggu iframe pertama terlihat...');
                  // Puppeteer default timeout untuk waitForSelector adalah 30 detik
                  await page.waitForSelector('iframe', { visible: true });
@@ -127,8 +125,6 @@ export default {
 
          // Kembalikan konten HTML yang dirender dengan header yang disalin/dari cache
          if (htmlContent !== null) {
-              // Buat respons baru menggunakan konten HTML dan header yang disiapkan.
-              // Status dan statusText bisa diambil dari initialResponse jika bukan cache hit.
               const finalResponse = new Response(htmlContent, {
                   headers: headersToReturn,
                   status: cachedData ? 200 : initialResponse.status, // Gunakan status asli kecuali dari cache (OK)
@@ -137,7 +133,7 @@ export default {
               return finalResponse;
 
          } else {
-              // Fallback jika somehow htmlContent masih null (tidak mungkin jika error ditangani)
+              // Fallback jika somehow htmlContent masih null
               return new Response("Gagal mengambil atau menghasilkan konten HTML.", { status: 500 });
          }
 
@@ -145,7 +141,6 @@ export default {
         // Jika kontennya BUKAN HTML, langsung kembalikan respons dari fetch awal
         console.log(`Content-Type bukan HTML (${contentType}), mengembalikan respons asli...`);
         // Mengembalikan objek Response dari fetch() secara langsung akan menyertakan body dan header asli.
-        // Cloudflare Worker akan menangani streaming body-nya.
         return initialResponse;
     }
   },
