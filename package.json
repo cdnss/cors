@@ -14,6 +14,6 @@
     "wrangler": "^4.14.0"
   },
   "dependencies": {
-    "cheerio": "^1.0.0-rc.12" // Tambahkan baris ini di sini
+    "cheerio": "^1.0.0-rc.12"
   }
 }
