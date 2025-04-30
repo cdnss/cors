@@ -55,11 +55,9 @@ export default {
     const contentType = initialResponse.headers.get('content-type') || '';
 
     // Cek jika kontennya adalah HTML dan perlu Puppeteer
-    // (Kita asumsikan semua konten text/html memerlukan Puppeteer berdasarkan riwayat permintaan Anda)
     if (contentType.includes('text/html')) {
          console.log(`Content-Type adalah HTML (${contentType}), memproses dengan Puppeteer...`);
 
-         // Struktur data yang disimpan di KV akan mencakup HTML dan header
          type CachedDataType = { html: string; headers: Record<string, string> };
 
          // Coba ambil konten HTML dan header dari cache KV
@@ -99,12 +97,56 @@ export default {
                  } else {
                       // Jika tidak valid, cetak peringatan dan gunakan objek header kosong
                       console.warn("Peringatan: Hasil dari puppeteerResponse.headers() tidak iterable atau null.", targetHeadersResult);
-                      console.log('Menggunakan header kosong untuk respons Puppeteer.');
+                      console.log('Menggunakan header kosong untuk respons Puppeteer guna menghindari error.');
                  }
 
-                 // Ambil seluruh konten HTML halaman setelah menunggu networkidle0
-                 htmlContent = await page.content();
-                 console.log('Konten HTML diambil.');
+                 // *** LAKUKAN MANIPULASI DOM DI SINI MENGGUNAKAN PAGE.EVALUATE ***
+                 console.log('Memulai manipulasi DOM: menghapus script "console" & membuat src absolut...');
+                 await page.evaluate(() => {
+                   // 1. Hapus tag script yang mengandung "console" di dalam kontennya
+                   // Kita ambil semua script
+                   const scripts = document.querySelectorAll('script');
+                   scripts.forEach(script => {
+                     // Cek jika script ini inline dan mengandung teks "console"
+                     // atau jika script ini eksternal dan src-nya mengandung "console"
+                     // Permintaan Anda "tag script yang mengandung console" bisa berarti keduanya.
+                     // Implementasi ini menghapus yang inline jika mengandung "console" ATAU yang eksternal jika src-nya mengandung "console".
+                     const hasConsoleInContent = script.textContent && script.textContent.includes('console');
+                     const hasConsoleInSrc = script.src && script.src.includes('console');
+
+                     if (hasConsoleInContent || hasConsoleInSrc) {
+                         console.log('Removing script tag containing "console" (inline or src):', script.src || (script.textContent || '').substring(0, 50) + '...');
+                         script.parentNode?.removeChild(script);
+                     }
+                   });
+
+                   // 2. Buat script src menjadi URL lengkap/absolut
+                   // Pilih script yang masih ada (belum dihapus) dan memiliki atribut 'src'
+                   const remainingScriptWithSrc = document.querySelectorAll('script[src]');
+                   remainingScriptWithSrc.forEach(script => {
+                     // Properti .src pada elemen script (atau elemen lain seperti <a>, <img>, <link>)
+                     // secara otomatis berisi URL absolut yang telah diselesaikan oleh browser
+                     // berdasarkan URL halaman saat ini.
+                     const absoluteSrc = script.src;
+                     const originalSrcAttribute = script.getAttribute('src'); // Ambil nilai atribut asli
+
+                     // Jika nilai atribut src asli berbeda dengan URL absolut yang sudah terselesaikan oleh browser,
+                     // berarti itu adalah URL relatif atau ada perbedaan lain (misal: skema http vs https).
+                     // Kita setel ulang atribut src ke URL absolut yang sudah terselesaikan.
+                     if (absoluteSrc && originalSrcAttribute !== absoluteSrc) {
+                         // console.log(`Making src absolute: ${originalSrcAttribute} -> ${absoluteSrc}`);
+                         script.setAttribute('src', absoluteSrc);
+                     }
+                   });
+
+                   // Anda bisa tambahkan manipulasi DOM lainnya di sini jika diperlukan
+                 });
+                 console.log('Manipulasi DOM selesai.');
+                 // *** AKHIR MANIPULASI DOM ***
+
+
+                 htmlContent = await page.content(); // Ambil konten HTML *setelah* manipulasi DOM
+                 console.log('Konten HTML diambil setelah manipulasi.');
 
                  // Simpan konten HTML dan header yang disaring ke KV
                  await env.BROWSER_KV_DEMO.put(url, JSON.stringify({ html: htmlContent, headers: copiedHeaders }), {
@@ -129,11 +171,10 @@ export default {
 
          // Kembalikan konten HTML yang dirender dengan header yang disalin/dari cache
          if (htmlContent !== null) {
-              // *** PERBAIKAN UNTUK MASALAH HTML MENTAH ***
-              // SETEL Content-Type secara eksplisit ke text/html
+              // Pastikan Content-Type selalu text/html saat mengembalikan konten HTML
               headersToReturn.set('content-type', 'text/html; charset=utf-8');
 
-              const finalResponse = new Response(htmlContent.replace("devtool","wowo"), {
+              const finalResponse = new Response(htmlContent, {
                   headers: headersToReturn, // Gunakan header yang disalin/dari cache + Content-Type yang benar
                   status: cachedData ? 200 : initialResponse.status, // Gunakan status asli kecuali dari cache (200 OK)
                   statusText: cachedData ? 'OK' : initialResponse.statusText, // Gunakan status text asli
@@ -148,7 +189,6 @@ export default {
     } else {
         // Jika kontennya BUKAN HTML, langsung kembalikan respons dari fetch awal
         console.log(`Content-Type bukan HTML (${contentType}), mengembalikan respons asli...`);
-        // Mengembalikan objek Response dari fetch() secara langsung akan menyertakan body dan header asli.
         return initialResponse;
     }
   },
