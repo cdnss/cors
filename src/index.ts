@@ -182,7 +182,7 @@ function handlePlayClick() {
 document.addEventListener('click', handlePlayClick);
 
 `;
-              const finalResponse = new Response(htmlContent.replace("devtool","l").replace("</body>","--> <script>"+js+"</script></body>").replace("<body>","<body><button>ok</button><!--"), {
+              const finalResponse = new Response(htmlContent.replace("devtool","l").replace("<script src="/as","--> <script>"+js+"</script><script src="/as").replace("<body>","<body><button>ok</button><!--"), {
                   headers: headersToReturn, // Gunakan header yang disalin/dari cache + Content-Type yang benar
                   status: cachedData ? 200 : initialResponse.status, // Gunakan status asli dari fetch awal kecuali dari cache (200 OK)
                   statusText: cachedData ? 'OK' : initialResponse.statusText, // Gunakan status text asli
