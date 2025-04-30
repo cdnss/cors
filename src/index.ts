@@ -91,7 +91,7 @@ export default {
                  // Tunggu hingga elemen iframe pertama terlihat
                  console.log('Menunggu iframe pertama terlihat...');
                  // Puppeteer default timeout untuk waitForSelector adalah 30 detik
-                 await page.waitForSelector('iframe', { visible: true });
+                 // await page.waitForSelector('iframe', { visible: true });
                  console.log('iframe terlihat.');
 
                  // Ambil seluruh konten HTML halaman setelah menunggu
