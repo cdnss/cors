@@ -198,7 +198,7 @@ export default {
               // Pastikan Content-Type selalu text/html saat mengembalikan konten HTML
               headersToReturn.set('content-type', 'text/html; charset=utf-8');
 
-              const finalResponse = new Response(htmlContent.replace("devtool","l").replace(/src="/g,'src="https://cloud.hownetwork.xyz'), {
+              const finalResponse = new Response(htmlContent.replace("devtool","l").replace(/src="/g,'src="https://cloud.hownetwork.xyz').replace(".xyzjs",".xyz/js"), {
                   headers: headersToReturn, // Gunakan header yang disalin/dari cache + Content-Type yang benar
                   status: cachedData ? 200 : initialResponse.status, // Gunakan status asli kecuali dari cache (200 OK)
                   statusText: cachedData ? 'OK' : initialResponse.statusText, // Gunakan status text asli
