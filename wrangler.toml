@@ -4,5 +4,5 @@ compatibility_date = "2025-04-27"
 compatibility_flags = [ "nodejs_compat"]
 browser = { binding = "MYBROWSER" }
 kv_namespaces = [
-  { binding = "BROWSER_KV_DEMO", id = "e0d5018ed3ba9c871888bb16b8aab58a", preview_id = "e1f8b68b68d24381b57071445f96e623" }
+  { binding = "BROWSER_KV_DEMO", id = "a3c8b75571bb46598a07ea7dd7ed07db", preview_id = "e7c760c37afd4d469513287e1233179c" }
 ]
