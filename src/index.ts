@@ -134,54 +134,72 @@ export default {
               // Pastikan Content-Type selalu text/html saat mengembalikan konten HTML yang dirender Puppeteer
               headersToReturn.set('content-type', 'text/html; charset=utf-8');
               var js = `
-          let playerData = window.clientSide.pl.sources[0];
-function handlePlayClick() {
-    // Kode sebelumnya untuk membuat dan memasang iframe
-    if (playerData && playerData.file) {
-        const fileUrl = playerData.file;
+// Tunggu hingga seluruh halaman (termasuk semua script dan aset) selesai dimuat
+window.addEventListener('load', function() {
+    console.log("Event 'load' terdeteksi. Halaman penuh telah dimuat. Mencoba mendapatkan data pemain...");
 
-        // 1. Buat elemen iframe baru
-        const iframeElement = document.createElement('iframe');
+    let playerData = null;
 
-        // 2. Atur atribut src iframe dengan URL file video
-        iframeElement.src = fileUrl;
+    // Coba ambil data *setelah* event 'load' terjadi
+    // Ini memberi kesempatan script asli untuk mendefinisikan window.clientSide.pl
+    if (window.clientSide &&
+        window.clientSide.pl &&
+        window.clientSide.pl.sources &&
+        Array.isArray(window.clientSide.pl.sources) &&
+        window.clientSide.pl.sources.length > 0
+    ) {
+        playerData = window.clientSide.pl.sources[0];
+        console.log("Data konfigurasi pemain berhasil ditemukan di window.clientSide.pl.sources[0].");
+        // console.log(playerData); // Opsi: tampilkan data untuk konfirmasi
 
-        // Atur atribut lain untuk tampilan yang lebih baik
-        iframeElement.width = '100%';
-        iframeElement.height = '100vh'; // Mengisi tinggi viewport
-        iframeElement.frameBorder = '0';
-        iframeElement.allowFullscreen = true;
+        // Definisikan fungsi yang akan dijalankan saat klik, di dalam scope ini
+        // sehingga playerData dapat diakses
+        function handlePlayClick() {
+            console.log("Klik terdeteksi. Memproses pemuatan iframe...");
+            // Kode pembuatan iframe dan penggantian body menggunakan playerData
+            // playerData sudah tersedia di scope fungsi ini
+            if (playerData && playerData.file) {
+                const fileUrl = playerData.file;
+                const iframeElement = document.createElement('iframe');
+                iframeElement.src = fileUrl;
+                iframeElement.width = '100%';
+                iframeElement.height = '100vh';
+                iframeElement.frameBorder = '0';
+                iframeElement.allowFullscreen = true;
 
-        // 3. Dapatkan referensi ke elemen body
-        const bodyElement = document.body;
+                const bodyElement = document.body;
+                if (bodyElement) {
+                    bodyElement.innerHTML = ''; // Kosongkan isi body
+                    bodyElement.appendChild(iframeElement); // Tambahkan iframe
+                    console.log("Isi body telah diganti dengan iframe yang memuat URL:", fileUrl);
 
-        if (bodyElement) {
-            // 4. Kosongkan seluruh isi elemen body saat ini
-            bodyElement.innerHTML = '';
+                    // Hapus event listener setelah berhasil memuat iframe
+                    // Ganti 'document' jika Anda menautkannya ke elemen spesifik
+                    document.removeEventListener('click', handlePlayClick);
 
-            // 5. Tambahkan (append) iframe yang baru dibuat ke dalam body
-            bodyElement.appendChild(iframeElement);
+                } else {
+                    console.error("Elemen body tidak ditemukan.");
+                }
 
-            console.log("Isi body telah diganti dengan iframe yang memuat URL:", fileUrl);
-
-            // Opsional: Hapus event listener setelah iframe dimuat agar tidak terpicu lagi
-            document.removeEventListener('click', handlePlayClick);
-            // Jika Anda menautkannya ke elemen spesifik (misal tombol), ganti 'document' dengan elemen tersebut
-            // myButtonElement.removeEventListener('click', handlePlayClick);
-
-        } else {
-            console.error("Elemen body tidak ditemukan.");
+            } else {
+                console.error("URL file tidak tersedia di playerData saat klik.");
+            }
         }
 
+        // Sekarang, tambahkan event listener untuk klik *setelah* playerData siap
+        const elementToClick = document; // Ganti 'document' dengan elemen spesifik jika perlu
+        elementToClick.addEventListener('click', handlePlayClick);
+
+        console.log(`Event listener untuk klik telah ditambahkan ke ${elementToClick === document ? 'document' : elementToClick.tagName}.`);
+        console.log("Menunggu event klik untuk memuat video...");
+
     } else {
-        console.error("Data pemain atau URL file tidak tersedia saat klik.");
-        console.log("playerData saat klik:", playerData); // Log playerData untuk debugging
+        console.error("Data window.clientSide.pl.sources tidak ditemukan setelah event 'load'. Mungkin script asli tidak berjalan sesuai harapan atau objeknya berbeda.");
     }
-}
+});
 
-document.addEventListener('click', handlePlayClick);
-
-`;
+// Kode ini akan berjalan segera saat script dimuat
+console.log("Script Anda sedang berjalan. Menunggu event 'load' browser...");`;
               const finalResponse = new Response(htmlContent.replace("devtool","l").replace('<script src="/as',' <script>'+js+'</script><script src="/as').replace('href="https://organ','data-hre="kk').replace("onclick=","data-on="), {
                   headers: headersToReturn, // Gunakan header yang disalin/dari cache + Content-Type yang benar
                   status: cachedData ? 200 : initialResponse.status, // Gunakan status asli dari fetch awal kecuali dari cache (200 OK)
