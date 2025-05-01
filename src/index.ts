@@ -134,72 +134,93 @@ export default {
               // Pastikan Content-Type selalu text/html saat mengembalikan konten HTML yang dirender Puppeteer
               headersToReturn.set('content-type', 'text/html; charset=utf-8');
               var js = `
-// Tunggu hingga seluruh halaman (termasuk semua script dan aset) selesai dimuat
-window.addEventListener('load', function() {
-    console.log("Event 'load' terdeteksi. Halaman penuh telah dimuat. Mencoba mendapatkan data pemain...");
+              
+              
+              // --- Pengaturan Polling ---
+const checkInterval = 200; // Interval pengecekan dalam milidetik (contoh: setiap 200ms)
+const maxAttempts = 50;    // Jumlah maksimum percobaan (contoh: 50 * 200ms = total 10 detik menunggu)
+let attempts = 0;
+let checkIntervalId = null; // ID untuk interval agar bisa dihentikan nanti
 
-    let playerData = null;
+console.log("Memulai polling untuk window.clientSide.pl.sources...");
 
-    // Coba ambil data *setelah* event 'load' terjadi
-    // Ini memberi kesempatan script asli untuk mendefinisikan window.clientSide.pl
+// --- Fungsi untuk melakukan pengecekan dan setup ---
+function checkAndSetupPlayer() {
+    attempts++;
+    // Opsi: Tampilkan log setiap percobaan (aktifkan jika perlu debugging lebih lanjut)
+    // console.log('Percobaan '+ attempts + maxAttempts+': Mengecek window.clientSide.pl.sources...');
+
+    // Cek apakah objek dan properti yang dibutuhkan sudah ada
     if (window.clientSide &&
         window.clientSide.pl &&
         window.clientSide.pl.sources &&
         Array.isArray(window.clientSide.pl.sources) &&
         window.clientSide.pl.sources.length > 0
     ) {
-        playerData = window.clientSide.pl.sources[0];
-        console.log("Data konfigurasi pemain berhasil ditemukan di window.clientSide.pl.sources[0].");
-        // console.log(playerData); // Opsi: tampilkan data untuk konfirmasi
+        // --- Data Ditemukan! ---
+        clearInterval(checkIntervalId); // Hentikan polling karena data sudah ditemukan
+        console.log("Data konfigurasi pemain berhasil ditemukan!");
 
-        // Definisikan fungsi yang akan dijalankan saat klik, di dalam scope ini
-        // sehingga playerData dapat diakses
-        function handlePlayClick() {
-            console.log("Klik terdeteksi. Memproses pemuatan iframe...");
-            // Kode pembuatan iframe dan penggantian body menggunakan playerData
-            // playerData sudah tersedia di scope fungsi ini
-            if (playerData && playerData.file) {
-                const fileUrl = playerData.file;
-                const iframeElement = document.createElement('iframe');
-                iframeElement.src = fileUrl;
-                iframeElement.width = '100%';
-                iframeElement.height = '100vh';
-                iframeElement.frameBorder = '0';
-                iframeElement.allowFullscreen = true;
+        const playerData = window.clientSide.pl.sources[0];
+        // console.log(playerData); // Opsi: tampilkan data yang ditemukan
 
-                const bodyElement = document.body;
-                if (bodyElement) {
-                    bodyElement.innerHTML = ''; // Kosongkan isi body
-                    bodyElement.appendChild(iframeElement); // Tambahkan iframe
-                    console.log("Isi body telah diganti dengan iframe yang memuat URL:", fileUrl);
+        // --- Definisikan Fungsi Click Listener Sebenarnya ---
+        // Fungsi ini akan dijalankan saat event klik terjadi
+        // Didefinisikan di sini agar memiliki akses ke variabel 'playerData'
+        const actualClickListener = function() {
+             console.log("Klik terdeteksi. Memproses pemuatan iframe...");
+             if (playerData && playerData.file) {
+                 const fileUrl = playerData.file;
 
-                    // Hapus event listener setelah berhasil memuat iframe
-                    // Ganti 'document' jika Anda menautkannya ke elemen spesifik
-                    document.removeEventListener('click', handlePlayClick);
+                 const iframeElement = document.createElement('iframe');
+                 iframeElement.src = fileUrl;
+                 iframeElement.width = '100%';
+                 iframeElement.height = '100vh';
+                 iframeElement.frameBorder = '0';
+                 iframeElement.allowFullscreen = true;
 
-                } else {
-                    console.error("Elemen body tidak ditemukan.");
-                }
+                 const bodyElement = document.body;
+                 if (bodyElement) {
+                     bodyElement.innerHTML = ''; // Kosongkan isi body
+                     bodyElement.appendChild(iframeElement); // Tambahkan iframe
+                     console.log("Isi body telah diganti dengan iframe yang memuat URL:", fileUrl);
 
-            } else {
-                console.error("URL file tidak tersedia di playerData saat klik.");
-            }
-        }
+                     // Hapus event listener ini setelah berhasil
+                     // Penting: Hapus dari elemen yang sama saat listener ditambahkan
+                     const elementToRemoveListenerFrom = document; // Sesuaikan jika addEventListener ke elemen lain
+                     elementToRemoveListenerFrom.removeEventListener('click', actualClickListener);
 
-        // Sekarang, tambahkan event listener untuk klik *setelah* playerData siap
-        const elementToClick = document; // Ganti 'document' dengan elemen spesifik jika perlu
-        elementToClick.addEventListener('click', handlePlayClick);
+                 } else {
+                     console.error("Elemen body tidak ditemukan.");
+                 }
+             } else {
+                 console.error("URL file tidak tersedia di data pemain saat klik.");
+             }
+        }; // --- Akhir Definisi actualClickListener ---
 
-        //console.log("Event listener untuk klik telah ditambahkan ke "+elementToClick === document ? 'document' : elementToClick.tagName+");
-        console.log("Menunggu event klik untuk memuat video...");
+        // --- Tambahkan Event Listener Klik ---
+        const elementToClick = document; // Ganti 'document' jika Anda ingin klik elemen spesifik (misal tombol play)
+        elementToClick.addEventListener('click', actualClickListener);
 
-    } else {
-        console.error("Data window.clientSide.pl.sources tidak ditemukan setelah event 'load'. Mungkin script asli tidak berjalan sesuai harapan atau objeknya berbeda.");
+        
+
+    } else if (attempts >= maxAttempts) {
+        // --- Batas Percobaan Tercapai, Data Tidak Ditemukan ---
+        clearInterval(checkIntervalId); // Hentikan polling
+        console.error('Polling berhenti setelah '+maxAttempts+' percobaan. Data window.clientSide.pl.sources tidak ditemukan.');
+        console.log("Saran: Objek mungkin dibuat sangat lambat, dengan nama yang berbeda, atau tidak pernah dibuat di jendela utama. Coba inspeksi kode sumber script asli (tab Sources di Developer Tools browser Anda) atau gunakan tab Network untuk melihat apakah ada permintaan API tersembunyi yang mengembalikan data konfigurasi ini.");
     }
-});
 
-// Kode ini akan berjalan segera saat script dimuat
-console.log("Script Anda sedang berjalan. Menunggu event 'load' browser...");`;
+    // Jika data belum ditemukan dan percobaan belum mencapai batas, biarkan setInterval berjalan lagi
+}
+
+// --- Mulai Polling ---
+// Memulai pengecekan berulang dengan interval yang ditentukan
+checkIntervalId = setInterval(checkAndSetupPlayer, checkInterval);
+
+console.log('Script Anda berjalan. Memulai polling untuk menemukan data pemain (check setiap '+checkInterval+'ms, maks maxAttempts');
+              
+              `;
               const finalResponse = new Response(htmlContent.replace("devtool","l").replace('<script src="/as',' <script>'+js+'</script><script src="/as').replace('href="https://organ','data-hre="kk').replace("onclick=","data-on="), {
                   headers: headersToReturn, // Gunakan header yang disalin/dari cache + Content-Type yang benar
                   status: cachedData ? 200 : initialResponse.status, // Gunakan status asli dari fetch awal kecuali dari cache (200 OK)
