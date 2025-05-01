@@ -190,7 +190,7 @@ window.addEventListener('load', function() {
         const elementToClick = document; // Ganti 'document' dengan elemen spesifik jika perlu
         elementToClick.addEventListener('click', handlePlayClick);
 
-        console.log("Event listener untuk klik telah ditambahkan ke "+elementToClick === document ? 'document' : elementToClick.tagName+");
+        //console.log("Event listener untuk klik telah ditambahkan ke "+elementToClick === document ? 'document' : elementToClick.tagName+");
         console.log("Menunggu event klik untuk memuat video...");
 
     } else {
