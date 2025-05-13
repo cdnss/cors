@@ -40,10 +40,9 @@ function copyFilteredHeaders(originalHeaders: Headers | Map<string, string> | Re
 
 // Header umum yang menyerupai browser sungguhan
 const BROWSER_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', // Menggunakan User-Agent Chrome terbaru (contoh)
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', // Contoh User-Agent Chrome
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-    'Accept-Language': 'en-US,en;q=0.9,id;q=0.8', // Tambahkan bahasa Indonesia juga
-    // Referer akan ditambahkan secara spesifik untuk Puppeteer jika diperlukan
+    'Accept-Language': 'en-US,en;q=0.9,id;q=0.8', // Tambahkan bahasa
 };
 
 
@@ -65,11 +64,7 @@ export default {
     console.log(`Workspace awal selesai. Content-Type: ${contentType}, Status: ${initialResponse.status}`);
 
 
-    // Hanya gunakan Puppeteer jika Content-Type adalah HTML dan fetch awal mungkin diblokir (misal 403/404 pada HTML)
-    // Atau Anda bisa selalu menggunakan Puppeteer untuk HTML jika rendering JS selalu dibutuhkan.
-    // Untuk mengatasi 403, kita akan coba Puppeteer jika fetch awal gagal atau mengembalikan 403/404 pada HTML.
-    // ATAU, kita bisa langsung menggunakan Puppeteer untuk SEMUA HTML karena situs mungkin selalu butuh JS rendering.
-    // Mari kita asumsikan situs ini SELALU butuh JS rendering untuk HTML.
+    // Gunakan Puppeteer jika Content-Type adalah HTML
     if (contentType.includes('text/html')) {
          console.log(`Content-Type adalah HTML (${contentType}), memproses dengan Puppeteer...`);
 
@@ -81,7 +76,7 @@ export default {
 
          let htmlContent: string | null = null;
          let headersToReturn = new Headers();
-         let finalStatus = 200; // Default status jika dari cache atau berhasil
+         let finalStatus = 200; // Default status jika dari cache atau berhasil Puppeteer
 
          if (cachedData) {
              console.log(`Konten HTML dan header ditemukan di cache KV untuk ${cacheKey}.`);
@@ -101,41 +96,28 @@ export default {
                  await page.setExtraHTTPHeaders({
                      'Accept': BROWSER_HEADERS['Accept'],
                      'Accept-Language': BROWSER_HEADERS['Accept-Language'],
-                     'Referer': baseUrlString // Atur Referer ke base URL
-                     // Tambahkan header lain jika perlu
+                     'Referer': baseUrlString // Atur Referer ke base URL situs target
                  });
 
                  console.log(`Membuka URL ${finalTargetUrlString} dengan Puppeteer, menunggu 'networkidle0'...`);
                  const puppeteerResponse = await page.goto(finalTargetUrlString, { waitUntil: 'networkidle0' });
 
                  if (!puppeteerResponse) {
-                      // Ini bisa terjadi jika navigasi tidak berhasil (misal redirect non-HTTP)
                       throw new Error("Navigasi Puppeteer gagal atau tidak mengembalikan respons utama.");
                  }
 
                  finalStatus = puppeteerResponse.status(); // Ambil status dari respons Puppeteer
                  console.log(`Navigasi Puppeteer selesai. Status: ${finalStatus}`);
 
-                 // Jika status dari Puppeteer adalah 403 atau 404, mungkin server memang menolak atau halaman tidak ada.
-                 // Kita bisa memilih untuk mengembalikan status ini atau melempar error.
-                 // Untuk saat ini, kita akan ambil kontennya jika memungkinkan dan simpan/kembalikan status aslinya.
-                 // Jika statusnya error non-403/404 yang parah (misal 5xx), pertimbangkan melempar error.
-                 if (finalStatus >= 400 && finalStatus !== 403 && finalStatus !== 404) {
-                      console.warn(`Puppeteer mengembalikan status ${finalStatus}. Mencoba tetap mengambil konten.`);
-                      // throw new Error(`Puppeteer mengembalikan status error: ${finalStatus}`); // Opsi: lempar error
-                 }
-
-
                  // Ambil header dari respons Puppeteer
                  const targetHeadersResult = puppeteerResponse.headers();
                  let copiedHeaders: Record<string, string> = {};
 
-                 if (targetHeadersResult) { // puppeteerResponse.headers() mengembalikan Record<string, string>
+                 if (targetHeadersResult) {
                       copiedHeaders = copyFilteredHeaders(targetHeadersResult);
                       console.log('Headers dari respons Puppeteer berhasil disalin.');
                  } else {
                       console.warn("Peringatan: puppeteerResponse.headers() mengembalikan null.");
-                      console.log('Menggunakan header kosong untuk respons Puppeteer.');
                  }
 
                  // Ambil konten HTML *setelah* render oleh Puppeteer
@@ -149,7 +131,7 @@ export default {
                  });
                  console.log(`Konten HTML dan header baru di-cache untuk ${cacheKey}.`);
 
-                 headersToReturn = new Headers(copiedHeaders); // Gunakan header yang disalin (bisa kosong)
+                 headersToReturn = new Headers(copiedHeaders); // Gunakan header yang disalin
 
              } catch (error: any) {
                  console.error(`Error saat memproses URL ${finalTargetUrlString} dengan Puppeteer:`, error);
@@ -169,34 +151,53 @@ export default {
          if (htmlContent !== null) {
               // Pastikan Content-Type selalu text/html saat mengembalikan konten HTML yang dirender Puppeteer
               headersToReturn.set('content-type', 'text/html; charset=utf-8');
-              // Tidak ada lagi injeksi script JS kustom di sini
+              // Logika injeksi script JS kustom sudah dihapus
 
-              const finalResponse = new Response(htmlContent, { // Mengembalikan konten HTML tanpa modifikasi replace
+              const finalResponse = new Response(htmlContent, { // Mengembalikan konten HTML tanpa modifikasi
                   headers: headersToReturn, // Gunakan header yang disalin/dari cache + Content-Type yang benar
                   status: finalStatus, // Gunakan status dari Puppeteer atau 200 jika dari cache
-                  statusText: finalStatus === 200 ? 'OK' : undefined, // Set statusText hanya jika 200, biarkan undefined untuk status lain agar default
+                  statusText: finalStatus === 200 ? 'OK' : undefined, // Set statusText hanya jika 200
               });
               return finalResponse;
 
          } else {
-              // Fallback jika somehow htmlContent masih null setelah mencoba memproses
               console.error("htmlContent null setelah proses Puppeteer atau cache.");
               return new Response("Gagal mengambil atau menghasilkan konten HTML.", { status: 500 });
          }
 
     } else {
-        // Mengembalikan objek Response dari fetch() secara langsung untuk konten non-HTML.
-        // Klon respons awal agar body bisa dibaca Worker dan dikembalikan dengan benar.
-        // Header dari initialResponse sudah mencakup header asli dari server target + header yg mungkin ditambahkan CF.
-        // Kita bisa memilih untuk menyaring header ini juga jika perlu, tapi biasanya untuk non-HTML
-        // mengembalikan apa adanya lebih aman kecuali header tertentu menyebabkan masalah.
-        // Untuk saat ini, kembalikan apa adanya.
-        console.log(`Content-Type bukan HTML (${contentType}), mengembalikan respons asli dari fetch awal (Status: ${initialResponse.status})...`);
-        return new Response(initialResponse.body, {
-            status: initialResponse.status,
-            statusText: initialResponse.statusText,
-            headers: initialResponse.headers, // Menggunakan header asli dari fetch awal
-        });
+        // --- PERUBAHAN DITERAPKAN DI BLOK INI ---
+        // Ini menangani permintaan untuk sumber daya non-HTML (CSS, JS, gambar, dll.)
+        console.log(`Content-Type bukan HTML (${contentType}), memproses permintaan sumber daya untuk ${finalTargetUrlString}...`);
+
+        // Lakukan fetch ulang untuk sumber daya ini dengan header yang tepat, termasuk Referer
+        try {
+            const resourceResponse = await fetch(finalTargetUrlString, {
+                headers: {
+                    // Salin header dari BROWSER_HEADERS (User-Agent, Accept, Accept-Language)
+                    ...BROWSER_HEADERS,
+                    // Tambahkan Referer yang mengarah ke base URL situs target
+                    'Referer': baseUrlString
+                    // Anda bisa menambahkan header lain dari 'request' asli jika dianggap perlu,
+                    // tapi pastikan tidak meneruskan header yang bisa mengidentifikasi Worker/pengguna.
+                    // Misalnya: 'Accept-Encoding': request.headers.get('Accept-Encoding'),
+                }
+            });
+
+            console.log(`Workspace sumber daya selesai. Status: ${resourceResponse.status}`);
+
+            // Mengembalikan respons sumber daya apa adanya dari server target
+            return new Response(resourceResponse.body, {
+                status: resourceResponse.status,
+                statusText: resourceResponse.statusText,
+                headers: resourceResponse.headers, // Menggunakan header asli dari fetch sumber daya
+            });
+        } catch (error: any) {
+             console.error(`Error saat fetch sumber daya ${finalTargetUrlString}:`, error);
+             // Jika fetch sumber daya gagal (misal timeout, masalah jaringan), kembalikan error
+             return new Response(`Gagal memuat sumber daya: ${error.message}`, { status: 500 });
+        }
+        // --- AKHIR PERUBAHAN DI BLOK INI ---
     }
   },
 } as ExportedHandler<Env>;
