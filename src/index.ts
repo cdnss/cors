@@ -40,7 +40,7 @@ function copyFilteredHeaders(originalHeaders: Headers | Map<string, string>): Re
 export default {
   async fetch(request: Request, env: Env): Promise<Response> { // Gunakan tipe Request
     // Konstruksi final target URL berdasarkan base URL tetap dan path/query dari request masuk
-    const baseUrlString = 'https://cloud.hownetwork.xyz';
+    const baseUrlString = 'https://doujindesu.tv';
     const incomingUrl = new URL(request.url);
     const finalTargetUrl = new URL(incomingUrl.pathname + incomingUrl.search, baseUrlString);
     const finalTargetUrlString = finalTargetUrl.toString();
