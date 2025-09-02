@@ -49,7 +49,7 @@ const BROWSER_HEADERS = {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const baseUrlString = 'https://doujindesu.tv';
+    const baseUrlString = 'https://ww3.anoboy.app';
     const incomingUrl = new URL(request.url);
     const finalTargetUrl = new URL(incomingUrl.pathname + incomingUrl.search, baseUrlString);
     const finalTargetUrlString = finalTargetUrl.toString();
