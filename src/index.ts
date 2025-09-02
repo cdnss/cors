@@ -9,7 +9,7 @@ export default {
     const url = new URL(request.url).pathname;
 
     // Ambil data dari KV
-    const cachedData = await env.MY_KV_NAMESPACE.get("scraped_content");
+    const cachedData = await env.BROWSER_KV_DEMO.get("scraped_content");
     if (cachedData) {
       return new Response(cachedData, {
         headers: {
